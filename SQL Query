@@ -1,0 +1,83 @@
+
+DROP TABLE IF EXISTS #SourceBA;
+DROP TABLE IF EXISTS #POR;
+DROP TABLE IF EXISTS #POD;
+DROP TABLE IF EXISTS #SinkBA;
+DROP TABLE IF EXISTS #TSP;
+DROP TABLE IF EXISTS #Combinations;
+----------------------------------------------
+SELECT * INTO #SourceBA
+FROM (VALUES 
+    ('IPCO'), ('BPAT'), ('CISO'), ('NEVP'), ('NWMT'), 
+    ('AZPS'), ('BCHA'), ('AESO'), ('SWPP'), ('SRP'), 
+    ('TEPC'), ('EPE'), ('WACM'), ('PSCO'), ('PACE'), 
+    ('WALC'), ('GRID'), ('AVRN'), ('AVA'), ('PSEI')
+) AS tbl(SourceBA);
+
+SELECT * INTO #POR
+FROM (VALUES 
+    ('BORA'), ('BRDY'), ('BPAT.NWMT'), ('GSHIN'), ('JBSN'), 
+    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('4Corners'), 
+    ('Glencanyon2'), ('RedB'), ('GON.PAV')
+) AS tbl(POR);
+
+SELECT * INTO #POD
+FROM (VALUES 
+    ('BORA'), ('BRDY'), ('BPAT.NWMT'), ('GSHIN'), ('JBSN'), 
+    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('4Corners'), 
+    ('Glencanyon2'), ('RedB'), ('GON.PAV')
+) AS tbl(POD);
+
+SELECT * INTO #SinkBA
+FROM (VALUES 
+    ('IPCO'), ('BPAT'), ('CISO'), ('NEVP'), ('NWMT'), 
+    ('AZPS'), ('BCHA'), ('AESO'), ('SWPP'), ('SRP'), 
+    ('TEPC'), ('EPE'), ('WACM'), ('PSCO'), ('PACE'), 
+    ('WALC'), ('GRID'), ('AVRN'), ('AVA'), ('PSEI')
+) AS tbl(SinkBA);
+
+SELECT * INTO #TSP
+FROM (VALUES 
+    ('PPW')
+	) AS tbl(TransSerProv);
+
+---------------------------------------
+SELECT 
+    sba.SourceBA, 
+    por.POR, 
+    pod.POD, 
+    skba.SinkBA,
+	t.TransSerProv AS TSP,
+    CONCAT(sba.SourceBA, '-', por.POR, '-', pod.POD, '-', skba.SinkBA) AS FullCombination
+INTO #Combinations
+FROM #SourceBA AS sba
+CROSS JOIN #POR AS por
+CROSS JOIN #POD AS pod
+CROSS JOIN #TSP AS t
+CROSS JOIN #SinkBA AS skba;
+
+-----------------------------------------
+SELECT
+    comb.SourceBA, 
+    comb.POR, 
+    comb.POD,
+    comb.SinkBA,
+	comb.TSP,
+    COALESCE(MAX(PhysSeg.TagCode), 'MISSING') AS ExampleTagCode,
+	MAX(DateTbl.OperatingDT) AS OperatingDT
+FROM #Combinations AS comb
+LEFT JOIN Tagging_ETAG.dbo.TagPhysicalSegmentETAGView AS PhysSeg 
+    ON  comb.SourceBA = PhysSeg.GeneratorBA_ETAG
+    AND comb.POR      = PhysSeg.POR_ETAG
+    AND comb.POD      = PhysSeg.POD_ETAG
+    AND comb.SinkBA   = PhysSeg.LoadBA_ETAG
+	AND comb.TSP	= PhysSeg.TransmissionServiceProvider_ETAG
+LEFT JOIN Tagging_ETAG.dbo.TagHourProfileETAGView AS DateTbl
+    ON PhysSeg.TagCode = DateTbl.TagCode
+GROUP BY 
+	comb.SourceBA, 
+    comb.POR, 
+    comb.POD, 
+    comb.SinkBA,
+	comb.TSP
+ORDER BY MAX(PhysSeg.TagCode) DESC;
