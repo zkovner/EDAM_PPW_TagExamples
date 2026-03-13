@@ -17,14 +17,14 @@ FROM (VALUES
 SELECT * INTO #POR
 FROM (VALUES 
     ('BORA'), ('BRDY'), ('BPAT.NWMT'), ('GSHIN'), ('JBSN'), 
-    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('4Corners'), 
+    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('FOURCORNE345'), 
     ('Glencanyon2'), ('RedB'), ('GON.PAV')
 ) AS tbl(POR);
 
 SELECT * INTO #POD
 FROM (VALUES 
     ('BORA'), ('BRDY'), ('BPAT.NWMT'), ('GSHIN'), ('JBSN'), 
-    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('4Corners'), 
+    ('YTP'), ('WYODAK'), ('DJ'), ('FGE'), ('FOURCORNE345'), 
     ('Glencanyon2'), ('RedB'), ('GON.PAV')
 ) AS tbl(POD);
 
@@ -47,13 +47,13 @@ SELECT
     por.POR, 
     pod.POD, 
     skba.SinkBA,
-	t.TransSerProv AS TSP,
+	tsp.TransSerProv AS TSP,
     CONCAT(sba.SourceBA, '-', por.POR, '-', pod.POD, '-', skba.SinkBA) AS FullCombination
 INTO #Combinations
 FROM #SourceBA AS sba
 CROSS JOIN #POR AS por
 CROSS JOIN #POD AS pod
-CROSS JOIN #TSP AS t
+CROSS JOIN #TSP AS tsp
 CROSS JOIN #SinkBA AS skba;
 
 -----------------------------------------
@@ -64,7 +64,10 @@ SELECT
     comb.SinkBA,
 	comb.TSP,
     COALESCE(MAX(PhysSeg.TagCode), 'MISSING') AS ExampleTagCode,
-	MAX(DateTbl.OperatingDT) AS OperatingDT
+	MAX(PhysSeg2.TransmissionServiceProvider_ETAG) AS importTSP,
+	MAX(PhysSeg3.TransmissionServiceProvider_ETAG) AS exportTSP
+
+	--MAX(DateTbl.OperatingDT) AS OperatingDT
 FROM #Combinations AS comb
 LEFT JOIN Tagging_ETAG.dbo.TagPhysicalSegmentETAGView AS PhysSeg 
     ON  comb.SourceBA = PhysSeg.GeneratorBA_ETAG
@@ -72,12 +75,18 @@ LEFT JOIN Tagging_ETAG.dbo.TagPhysicalSegmentETAGView AS PhysSeg
     AND comb.POD      = PhysSeg.POD_ETAG
     AND comb.SinkBA   = PhysSeg.LoadBA_ETAG
 	AND comb.TSP	= PhysSeg.TransmissionServiceProvider_ETAG
-LEFT JOIN Tagging_ETAG.dbo.TagHourProfileETAGView AS DateTbl
-    ON PhysSeg.TagCode = DateTbl.TagCode
+LEFT JOIN Tagging_ETAG.dbo.TagPhysicalSegmentETAGView AS PhysSeg2
+    ON  PhysSeg2.TagCode           = PhysSeg.TagCode
+    AND PhysSeg2.PhysicalSegmentID = PhysSeg.PhysicalSegmentID - 1
+	LEFT JOIN Tagging_ETAG.dbo.TagPhysicalSegmentETAGView AS PhysSeg3
+    ON  PhysSeg3.TagCode           = PhysSeg.TagCode
+    AND PhysSeg3.PhysicalSegmentID = PhysSeg.PhysicalSegmentID + 1
 GROUP BY 
 	comb.SourceBA, 
     comb.POR, 
     comb.POD, 
     comb.SinkBA,
 	comb.TSP
-ORDER BY MAX(PhysSeg.TagCode) DESC;
+	--PhysSeg2.TransmissionServiceProvider_ETAG
+HAVING COALESCE(MAX(PhysSeg.TagCode), 'MISSING') <> 'MISSING'
+ORDER BY MAX(PhysSeg.TagCode) DESC
